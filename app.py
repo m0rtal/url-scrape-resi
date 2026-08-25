@@ -26,7 +26,30 @@ PROXY_URL = os.getenv("PROXY_URL", "").strip()
 BLOCK_MEDIA = os.getenv("BLOCK_MEDIA", "True").lower() in ("1", "true", "yes")
 DEFAULT_TIMEOUT_MS = int(os.getenv("TIMEOUT_MS", "30000"))
 DEFAULT_WAIT_AFTER_LOAD = int(os.getenv("WAIT_AFTER_LOAD", "1500"))
-CHROMIUM_BIN = "/usr/bin/chromium"
+import shutil
+def _find_chromium():
+    """Locate chromium binary in well-known locations."""
+    candidates = [
+        shutil.which("chromium"), shutil.which("chromium-browser"), shutil.which("google-chrome"),
+        "/usr/bin/chromium", "/usr/bin/chromium-browser", "/usr/bin/google-chrome",
+        "/ms-playwright/chromium-1234/chrome-linux/chrome",
+        "/ms-playwright/chromium-1181/chrome-linux/chrome",
+        "/ms-playwright/chromium-1180/chrome-linux/chrome",
+        "/ms-playwright/chromium-1179/chrome-linux/chrome",
+        "/ms-playwright/chromium-1175/chrome-linux/chrome",
+    ]
+    for c in candidates:
+        if c and os.path.exists(c):
+            return c
+    # Fallback: glob playwright dirs
+    import glob
+    matches = sorted(glob.glob("/ms-playwright/chromium-*/chrome-linux/chrome"))
+    if matches:
+        return matches[-1]
+    return None
+CHROMIUM_BIN = _find_chromium()
+if not CHROMIUM_BIN:
+    log.error("FATAL: chromium not found in any standard location")
 
 
 def chrome_args():
