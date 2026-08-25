@@ -1,6 +1,6 @@
 {
   "name": "url-scrape-resi",
-  "version": "3.0.1",
+  "version": "3.0.2",
   "description": "Lightweight URL scraper with proxy support and JS rendering via Playwright",
   "type": "module",
   "main": "server.js",

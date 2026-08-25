@@ -17,7 +17,7 @@ EXPOSE 3003
 HEALTHCHECK --interval=30s --timeout=5s --retries=3 \
   CMD wget --quiet --tries=1 --spider http://127.0.0.1:3003/health || exit 1
 
-# Run as the built-in non-root user
-USER node
+# Run as root (Portainer LXC userns mapping doesn't have a 'node' user)
+USER root
 
 CMD ["node", "server.js"]
