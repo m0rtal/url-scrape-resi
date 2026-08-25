@@ -1,10 +1,12 @@
 // test/server.test.js — uses node:test built-in runner.
-// Tests health, version, and a basic local-server scrape (without network proxy).
+// Tests health, version, proxy-config parsing, and basic local-server scrape
+// (without network proxy).
 
 import { test } from "node:test";
 import assert from "node:assert/strict";
 import http from "node:http";
 import { chromium } from "playwright";
+import { parseProxyConfig } from "../proxy.js";
 
 const PORT = 4310;
 const BASE = `http://127.0.0.1:${PORT}`;
@@ -96,6 +98,35 @@ function fetchJson(method, path, body) {
     req.end();
   });
 }
+
+// ---- parseProxyConfig unit tests ----
+test("parseProxyConfig returns null for empty url", () => {
+  assert.equal(parseProxyConfig(""), null);
+  assert.equal(parseProxyConfig(null), null);
+  assert.equal(parseProxyConfig(undefined), null);
+  assert.equal(parseProxyConfig("not-a-url"), null);
+  assert.equal(parseProxyConfig("socks5://1.2.3.4:1080"), null); // unsupported scheme
+});
+
+test("parseProxyConfig splits credentials from URL", () => {
+  const cfg = parseProxyConfig("http://user:pass@proxy.example.com:47819");
+  assert.equal(cfg.server, "http://proxy.example.com:47819");
+  assert.equal(cfg.username, "user");
+  assert.equal(cfg.password, "pass");
+});
+
+test("parseProxyConfig URL-decodes percent-encoded creds", () => {
+  const cfg = parseProxyConfig("http://3uy9NMIDdoddrQs:M2Cl8cBvgZWoqmK@5.252.79.90:47819");
+  assert.equal(cfg.username, "3uy9NMIDdoddrQs");
+  assert.equal(cfg.password, "M2Cl8cBvgZWoqmK");
+});
+
+test("parseProxyConfig without creds still works", () => {
+  const cfg = parseProxyConfig("http://proxy.example.com:8080");
+  assert.equal(cfg.server, "http://proxy.example.com:8080");
+  assert.equal(cfg.username, undefined);
+  assert.equal(cfg.password, undefined);
+});
 
 test("GET /health returns ok", async () => {
   const proc = await startServer();
