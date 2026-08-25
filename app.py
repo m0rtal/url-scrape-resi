@@ -137,15 +137,20 @@ async def _scrape_one(url, wait_after_load, timeout_ms):
 
         html = stdout.decode("utf-8", errors="replace")
 
-        # Filter out chromium error pages (CSS blob artifact)
-        # They start with "<style>..." and contain "color: var(--link-color)" — page never loaded.
+        # Filter out chromium error pages. Real chromium error page (when navigation
+        # hasn't completed) is small, starts with <style> and contains <html><head>
+        # but no <body>...</body>. Real pages always have </body> + significant text.
+        # Be CONSERVATIVE — only flag as error page if BOTH:
+        #   (a) len < MIN_USEFUL_HTML (500), OR
+        #   (b) starts with <style> AND lacks </body>
+        # Many real sites (example.com, google.com) include --google-gray in CSS,
+        # so we cannot use that as a fingerprint.
+        html_lower_strip = html.lstrip().lower()
+        starts_with_style = html_lower_strip.startswith("<style>") or html_lower_strip.startswith("<style ")
+        lacks_body = "</body>" not in html_lower_strip and "</html>" in html_lower_strip
         is_chromium_error = (
             len(html) < MIN_USEFUL_HTML
-            or html.lstrip().lower().startswith("<style>")
-            or "--google-gray" in html[:1000]
-            and "Example Domain" not in html
-            and "github.com" not in html
-            and "vercel" not in html.lower()[:500]
+            or (starts_with_style and lacks_body)
         )
 
         if is_chromium_error and attempt == 1:
