@@ -4,6 +4,7 @@
 
 import http from "node:http";
 import { chromium } from "playwright";
+import { parseProxyConfig } from "./proxy.js";
 
 // Tiny built-in HTML -> Markdown converter. Avoids the 3-year-stale
 // `markdownify` npm package and keeps the image fully self-contained.
@@ -120,7 +121,10 @@ async function getBrowser() {
   // image where the binary lives at a known path). Saves the "playwright install"
   // step at runtime.
   if (process.env.CHROMIUM_PATH) launchOpts.executablePath = process.env.CHROMIUM_PATH;
-  if (PROXY_URL) launchOpts.proxy = { server: PROXY_URL };
+  // parseProxyConfig (proxy.js) splits PROXY_URL into server + username/password
+  // so chromium receives Proxy-Authorization headers instead of 407.
+  const proxyCfg = parseProxyConfig(PROXY_URL);
+  if (proxyCfg) launchOpts.proxy = proxyCfg;
   browser = await chromium.launch(launchOpts);
   return browser;
 }
