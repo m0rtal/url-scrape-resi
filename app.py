@@ -34,7 +34,10 @@ def chrome_args():
         "--no-sandbox", "--disable-dev-shm-usage",
         "--disable-blink-features=AutomationControlled",
         "--headless=new", "--disable-gpu",
+        "--no-zygote", "--single-process",
         "--no-first-run", "--no-default-browser-check",
+        "--disable-extensions", "--disable-background-networking",
+        "--disable-features=VizDisplayCompositor",
     ]
     if BLOCK_MEDIA:
         args.append("--block-media")
@@ -61,16 +64,30 @@ async def _scrape_one(url, wait_after_load, timeout_ms):
 
 
 def html_to_md(html):
-    try:
-        import markdownify
-        md = markdownify.markdownify(html, heading_style="ATX", bullets="-",
-                                      strip=["script", "style", "noscript"])
-    except ImportError:
-        # Fallback: very rough plain-text
-        md = re.sub(r"<[^>]+>", "", html)
-    md = re.sub(r"\n{3,}", "\n\n", md).strip()
+    # No pip deps — stdlib re HTML→MD
+    # Strip script/style/comments first
+    s = re.sub(r"<script[^>]*>.*?</script>", "", html, flags=re.DOTALL)
+    s = re.sub(r"<style[^>]*>.*?</style>", "", s, flags=re.DOTALL)
+    s = re.sub(r"<!--.*?-->", "", s, flags=re.DOTALL)
+    # Headings
+    s = re.sub(r"<h([1-6])[^>]*>(.*?)</h\1>", lambda m: "#" * int(m.group(1)) + " " + m.group(2) + "\n\n", s, flags=re.DOTALL)
+    # Paragraphs
+    s = re.sub(r"<p[^>]*>", "\n\n", s)
+    s = re.sub(r"</p>", "", s)
+    # Lists
+    s = re.sub(r"<li[^>]*>", "- ", s)
+    s = re.sub(r"</li>", "\n", s)
+    # Line breaks
+    s = re.sub(r"<br\s*/?>", "\n", s)
+    # Strip remaining tags
+    s = re.sub(r"<[^>]+>", "", s)
+    # Decode common entities
+    s = s.replace("&amp;", "&").replace("&lt;", "<").replace("&gt;", ">").replace("&quot;", '"').replace("&#39;", "'").replace("&nbsp;", " ")
+    # Normalize whitespace
+    s = re.sub(r"[ \t]+", " ", s)
+    s = re.sub(r"\n{3,}", "\n\n", s).strip()
     title_m = re.search(r"<title>([^<]*)</title>", html)
-    return md, (title_m.group(1) if title_m else "")
+    return s, (title_m.group(1) if title_m else "")
 
 
 async def do_scrape(urls, formats, wait_after_load, timeout_ms):
