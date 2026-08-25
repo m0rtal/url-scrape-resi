@@ -1,40 +1,27 @@
 version: "3.8"
+
 services:
   url-scrape-resi:
-    # Built locally by Portainer from the git repo context (Dockerfile present).
-    # We do NOT use the upstream playwright image directly because:
-    # 1. Need pip install (fastapi/uvicorn/markdownify/httpx)
-    # 2. Need to bake our fixed app.py into the image
-    build:
-      context: .
-      dockerfile: Dockerfile
-    image: url-scrape-resi:2.0.0
+    build: .
+    image: ghcr.io/m0rtal/url-scrape-resi:3.0.0
     container_name: url-scrape-resi
     restart: unless-stopped
-    networks:
-      - resi
     ports:
       - "3003:3003"
-    shm_size: "256m"
     environment:
       - PORT=3003
       - PROXY_URL=${PROXY_URL:-}
-      - BLOCK_MEDIA=True
-      - TIMEOUT_MS=45000
-      - WAIT_AFTER_LOAD=3000
-      - DEBIAN_FRONTEND=noninteractive
-      - PIP_DISABLE_PIP_VERSION_CHECK=1
-      - LOG_LEVEL=INFO
-      - MAX_CONCURRENT=3
-    # Healthcheck: confirm container responds + chromium path exists
+      - MAX_CONCURRENT=2
+      - WAIT_AFTER_LOAD_MS=2000
+      - TIMEOUT_MS=30000
     healthcheck:
-      test: ["CMD-SHELL", "python3 -c 'import urllib.request, sys; r = urllib.request.urlopen(\"http://127.0.0.1:3003/health\", timeout=5); d = __import__(\"json\").loads(r.read()); sys.exit(0 if d.get(\"chromium\") else 1)'"]
+      test: ["CMD", "wget", "--quiet", "--tries=1", "--spider", "http://127.0.0.1:3003/health"]
       interval: 30s
-      timeout: 10s
+      timeout: 5s
       retries: 3
-      start_period: 60s
-    labels:
-      - "com.centurylinklabs.watchtower.enable=false"
+      start_period: 30s
+    networks:
+      - resi
 
 networks:
   resi:
