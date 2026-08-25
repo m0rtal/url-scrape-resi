@@ -86,6 +86,59 @@ async def scrape(request: Request):
     all_ok = all(r["success"] for r in results)
     return JSONResponse(status_code=200 if all_ok else 207, content={"success": all_ok, "results": results})
 
+
+# Firecrawl v2 API compatibility: POST /v2/scrape with {"url":..., "formats":[...]}
+@app.post("/v2/scrape")
+async def scrape_v2(request: Request):
+    try:
+        body = await request.json()
+    except Exception:
+        return JSONResponse(status_code=400, content={"success": False, "error": "invalid JSON"})
+    url = body.get("url")
+    if not url:
+        return JSONResponse(status_code=400, content={"success": False, "error": "missing url"})
+    formats = body.get("formats", ["markdown"])
+    wait_after_load = int(body.get("wait_after_load") or DEFAULT_WAIT_AFTER_LOAD)
+    timeout_ms = int(body.get("timeout") or DEFAULT_TIMEOUT_MS)
+    try:
+        r = await _scrape_one(url, wait_after_load, timeout_ms)
+    except Exception as e:
+        log.exception("scrape v2 %s failed: %s", url, e)
+        return JSONResponse(status_code=500, content={"success": False, "error": str(e)})
+    # Firecrawl v2 response shape
+    data = {}
+    if "markdown" in formats:
+        data["markdown"] = r["markdown"]
+    if "html" in formats:
+        data["html"] = ""
+    data["metadata"] = r["metadata"]
+    return JSONResponse({"success": True, "data": data, "url": url})
+
+
+# Firecrawl v2 batch endpoint
+@app.post("/v2/batch/scrape")
+async def batch_scrape_v2(request: Request):
+    try:
+        body = await request.json()
+    except Exception:
+        return JSONResponse(status_code=400, content={"success": False, "error": "invalid JSON"})
+    urls = body.get("urls", [])
+    if not urls:
+        return JSONResponse(status_code=400, content={"success": False, "error": "missing urls"})
+    formats = body.get("formats", ["markdown"])
+    wait_after_load = int(body.get("wait_after_load") or DEFAULT_WAIT_AFTER_LOAD)
+    timeout_ms = int(body.get("timeout") or DEFAULT_TIMEOUT_MS)
+    out = []
+    for u in urls:
+        try:
+            r = await _scrape_one(u, wait_after_load, timeout_ms)
+            data = {"markdown": r["markdown"]} if "markdown" in formats else {}
+            data["metadata"] = r["metadata"]
+            out.append({"url": u, "success": True, "data": data})
+        except Exception as e:
+            out.append({"url": u, "success": False, "error": str(e)})
+    return JSONResponse({"success": True, "data": out, "status": "completed"})
+
 @app.get("/")
 async def root():
     return await health()
