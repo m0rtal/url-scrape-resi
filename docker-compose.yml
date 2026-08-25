@@ -1,7 +1,7 @@
 version: "3.8"
 services:
   url-scrape-resi:
-    image: mcr.microsoft.com/playwright/python:v1.55.0-jammy
+    image: python:3.11-slim-bookworm
     container_name: url-scrape-resi
     restart: unless-stopped
     networks:
@@ -16,7 +16,18 @@ services:
       - TIMEOUT_MS=30000
       - WAIT_AFTER_LOAD=1500
       - DEBIAN_FRONTEND=noninteractive
-      - PIP_DISABLE_PIP_VERSION_CHECK=1
+    entrypoint:
+      - bash
+      - -c
+      - |
+        set -e
+        apt-get update -qq
+        apt-get install -y -qq --no-install-recommends chromium chromium-driver fonts-liberation libnss3 libgbm1 libasound2
+        pip install --break-system-packages --no-cache-dir fastapi==0.115.0 'uvicorn[standard]==0.32.0' markdownify==0.14.1 httpx==0.27.2
+        cd /app
+        exec python3 -m uvicorn app:app --host 0.0.0.0 --port 3003 --workers 1 --log-level info
+    volumes:
+      - ./app.py:/app/app.py:ro
 
 networks:
   resi:
