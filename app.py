@@ -47,6 +47,8 @@ def _chrome_args(wait_ms, total_ms):
         "--disable-extensions",
         "--disable-background-networking",
         "--no-sandbox",
+        f"--user-data-dir=/tmp/chrome-profile-{os.getpid()}",
+        "--no-zygote",
     ]
     if BLOCK_MEDIA:
         args.append("--block-media")
