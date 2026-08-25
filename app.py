@@ -46,18 +46,15 @@ def _chrome_args(wait_ms, total_ms):
     args = [
         CHROMIUM_BIN,
         "--no-sandbox",
-        "--headless",
+        "--headless=new",
         "--disable-gpu",
-        "--disable-software-rasterizer",
         "--disable-dev-shm-usage",
         "--disable-blink-features=AutomationControlled",
         "--no-first-run",
         "--no-default-browser-check",
         "--disable-extensions",
         "--disable-background-networking",
-        "--no-sandbox",
         f"--user-data-dir=/tmp/chrome-profile-{os.getpid()}",
-        "--no-zygote",
     ]
     if BLOCK_MEDIA:
         args.append("--block-media")
