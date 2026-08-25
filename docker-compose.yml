@@ -26,7 +26,8 @@ services:
         apt-get install -y -qq --no-install-recommends chromium chromium-driver fonts-liberation libnss3 libgbm1 libasound2
         pip install --break-system-packages --no-cache-dir fastapi==0.115.0 'uvicorn[standard]==0.32.0' markdownify==0.14.1 httpx==0.27.2
         mkdir -p /app
-        echo "$$APP_PY_B64" | base64 -d > /app/app.py
+        echo "$APP_PY_B64" | base64 -d > /app/app.py
+        chmod 644 /app/app.py
         cd /app
         exec python3 -m uvicorn app:app --host 0.0.0.0 --port 3003 --workers 1 --log-level info
 
