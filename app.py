@@ -42,20 +42,24 @@ def _chrome_args():
 
 
 async def _scrape_one(url, wait_after_load, timeout_ms):
+    # Wait_ms in chromium --virtual-time-budget. We also add 2s real-time wait
+    # because some JS hydrates after virtual time elapses.
+    virtual_budget = max(wait_after_load, 100)
     args = _chrome_args() + [
-        f"--virtual-time-budget={wait_after_load}",
+        f"--virtual-time-budget={virtual_budget}",
         f"--timeout={timeout_ms // 1000}",
+        "--run-all-compositor-stages-before-draw",
         "--dump-dom",
         url,
     ]
     proc = await asyncio.create_subprocess_exec(
         CHROMIUM_BIN, *args,
         stdout=asyncio.subprocess.PIPE,
-        stderr=asyncio.subprocess.PIPE,
+        stderr=asyncio.subprocess.DEVNULL,  # suppress dbus errors
     )
     try:
-        stdout, stderr = await asyncio.wait_for(
-            proc.communicate(), timeout=timeout_ms / 1000 + 5
+        stdout, _ = await asyncio.wait_for(
+            proc.communicate(), timeout=timeout_ms / 1000 + 30
         )
     except asyncio.TimeoutError:
         proc.kill()
