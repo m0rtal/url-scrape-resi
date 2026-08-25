@@ -163,9 +163,9 @@ async def _scrape_one(url, wait_after_load, timeout_ms):
 
         if is_chromium_error:
             log.error(
-                f"chromium error page persisted after retry for {url}, len={len(html)}"
+                f"chromium error page persisted after retry for {url}, len={len(html)} head={html[:200]!r}"
             )
-            return None, last_err or "chromium error page after retry"
+            return None, (last_err or "chromium error page after retry") + f" head={html[:200]!r}"
 
         log.info(f"scrape ok url={url} html_len={len(html)} attempt={attempt}")
         return html, None
