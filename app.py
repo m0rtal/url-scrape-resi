@@ -89,7 +89,15 @@ async def scrape(request: Request):
             results.append({"success": False, "url": url, "error": str(e)})
 
     all_ok = all(r["success"] for r in results)
-    return JSONResponse(status_code=200 if all_ok else 207, content={"success": all_ok, "results": results})
+    # Yandex plugin contract: response must have "ok": True/False (not "success").
+    return JSONResponse(
+        status_code=200 if all_ok else 207,
+        content={
+            "ok": all_ok,
+            "success": all_ok,
+            "results": results,
+        },
+    )
 
 
 # Yandex plugin compatible: POST /scrape with {url, format} (singular string)
