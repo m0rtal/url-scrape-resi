@@ -66,7 +66,12 @@ async def scrape(request: Request):
     urls = body.get("urls") or ([body.get("url")] if body.get("url") else [])
     if not urls:
         return JSONResponse(status_code=400, content={"success": False, "error": "missing url(s)"})
-    formats = body.get("formats", ["markdown"])
+    # Accept both "format" (singular string) and "formats" (list) for compat with yandex/firecrawl plugins
+    raw_formats = body.get("formats")
+    if raw_formats is None:
+        single_fmt = body.get("format")
+        raw_formats = [single_fmt] if isinstance(single_fmt, str) else (single_fmt if isinstance(single_fmt, list) else ["markdown"])
+    formats = raw_formats or ["markdown"]
     wait_after_load = int(body.get("wait_after_load") or DEFAULT_WAIT_AFTER_LOAD)
     timeout_ms = int(body.get("timeout") or DEFAULT_TIMEOUT_MS)
 
@@ -85,6 +90,12 @@ async def scrape(request: Request):
 
     all_ok = all(r["success"] for r in results)
     return JSONResponse(status_code=200 if all_ok else 207, content={"success": all_ok, "results": results})
+
+
+# Yandex plugin compatible: POST /scrape with {url, format} (singular string)
+# (Handled by the unified /scrape handler above; left here only as documentation.)
+# @app.post("/yandex/scrape")
+# async def scrape_yandex(request: Request): ... (see /scrape above)
 
 
 # Firecrawl v2 API compatibility: POST /v2/scrape with {"url":..., "formats":[...]}
