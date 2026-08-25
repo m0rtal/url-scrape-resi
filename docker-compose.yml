@@ -43,9 +43,10 @@ services:
         # Write app.py
         mkdir -p /app
         cat > /app/app.py <<'PYEOF_APP'
+        """url-scrape-resi — minimal HTTP server (stdlib) + chromium --dump-dom + stdlib HTML→MD."""
         from fastapi import FastAPI, Request
         from fastapi.responses import JSONResponse
-        import logging, os, re, subprocess, asyncio, glob
+        import logging, os, re, subprocess, asyncio, glob, json as _json
 
         log = logging.getLogger("url-scrape-resi")
         logging.basicConfig(level=os.getenv("LOG_LEVEL", "INFO"), format="%(asctime)s %(message)s")
@@ -57,7 +58,16 @@ services:
 
         def _find_chromium():
             import shutil
-            for c in [
+            # Try chromium_headless_shell FIRST (always returns DOM) and then chromium
+            chromium_candidates = sorted(glob.glob("/ms-playwright/chromium-*/chrome-linux/chrome"), reverse=True)
+            for c in chromium_candidates:
+                if os.access(c, os.X_OK):
+                    return c
+            headless_shell_candidates = sorted(glob.glob("/ms-playwright/chromium_headless_shell-*/chrome-linux/headless_shell"), reverse=True)
+            for c in headless_shell_candidates:
+                if os.access(c, os.X_OK):
+                    return c
+            candidates = [
                 shutil.which("chromium"), shutil.which("chromium-browser"),
                 "/usr/bin/chromium", "/usr/bin/chromium-browser",
                 "/ms-playwright/chromium-1234/chrome-linux/chrome",
@@ -65,7 +75,8 @@ services:
                 "/ms-playwright/chromium-1180/chrome-linux/chrome",
                 "/ms-playwright/chromium-1179/chrome-linux/chrome",
                 "/ms-playwright/chromium-1175/chrome-linux/chrome",
-            ]:
+            ]
+            for c in candidates:
                 if c and os.path.exists(c) and os.access(c, os.X_OK):
                     return c
             for c in sorted(glob.glob("/ms-playwright/chromium-*/chrome-linux/chrome"), reverse=True):
@@ -76,41 +87,49 @@ services:
         CHROMIUM_BIN = _find_chromium()
         log.info(f"chromium bin: {CHROMIUM_BIN}")
 
-        def _chrome_args():
+        def _chrome_args(wait_ms, total_ms):
             args = [
-                "--no-sandbox", "--disable-dev-shm-usage",
+                CHROMIUM_BIN,
+                "--no-sandbox",
+                "--headless=new",
+                "--disable-gpu",
+                "--disable-dev-shm-usage",
                 "--disable-blink-features=AutomationControlled",
-                "--headless=new", "--disable-gpu",
-                "--no-first-run", "--no-default-browser-check",
-                "--single-process",
-                "--disable-extensions", "--disable-background-networking",
+                "--no-first-run",
+                "--no-default-browser-check",
+                "--disable-extensions",
+                "--disable-background-networking",
+                f"--user-data-dir=/tmp/chrome-profile-{os.getpid()}",
             ]
             if BLOCK_MEDIA:
                 args.append("--block-media")
             if PROXY_URL:
                 args.append(f"--proxy-server={PROXY_URL}")
                 log.info("chromium proxy enabled")
+            args.append(f"--timeout={max(total_ms // 1000, 30)}")
+            args.append("--dump-dom")
             return args
 
         async def _scrape_one(url, wait_after_load, timeout_ms):
             if not CHROMIUM_BIN:
                 return None, "chromium binary not found in image"
-            args = _chrome_args() + [
+            total_ms = timeout_ms + wait_after_load
+            args = _chrome_args(wait_after_load, total_ms) + [
                 f"--virtual-time-budget={max(wait_after_load, 100)}",
-                f"--timeout={timeout_ms // 1000}",
-                "--run-all-compositor-stages-before-draw",
-                "--dump-dom", url,
+                url,
             ]
             proc = await asyncio.create_subprocess_exec(
-                CHROMIUM_BIN, *args, stdout=subprocess.PIPE, stderr=subprocess.DEVNULL,
+                *args, stdout=subprocess.PIPE, stderr=subprocess.PIPE,
             )
             try:
-                stdout, _ = await asyncio.wait_for(
-                    proc.communicate(), timeout=timeout_ms / 1000 + 30
+                stdout, stderr = await asyncio.wait_for(
+                    proc.communicate(), timeout=total_ms / 1000 + 30
                 )
             except asyncio.TimeoutError:
                 proc.kill()
                 return None, "chrome timeout"
+            if proc.returncode != 0:
+                return None, f"chrome exit {proc.returncode}: {stderr.decode()[:200]}"
             return stdout.decode("utf-8", errors="replace"), None
 
         def html_to_md(html):
@@ -143,7 +162,6 @@ services:
             return results
 
         from http.server import BaseHTTPRequestHandler, HTTPServer
-        import json as _json
 
         class H(BaseHTTPRequestHandler):
             def log_message(self, *a): pass
@@ -153,10 +171,10 @@ services:
             def _json(self, c, o): self._send(c, _json.dumps(o, ensure_ascii=False))
             def do_GET(self):
                 if self.path == "/health":
-                    self._json(200, {"status": "ok", "proxy_enabled": bool(PROXY_URL), "chromium": CHROMIUM_BIN is not None})
+                    self._json(200, {"status": "ok", "proxy_enabled": bool(PROXY_URL), "chromium": CHROMIUM_BIN is not None, "chromium_path": CHROMIUM_BIN or ""})
                 elif self.path == "/version":
-                    self._json(200, {"name": "url-scrape-resi", "version": "1.4.0"})
-                elif self.path == "/" or self.path == "/yandex":
+                    self._json(200, {"name": "url-scrape-resi", "version": "1.5.0"})
+                elif self.path in ("/", "/yandex"):
                     self._json(200, {"status": "ok", "service": "url-scrape-resi"})
                 else:
                     self._json(404, {"error": "not found"})
@@ -166,7 +184,7 @@ services:
                 try:
                     n = int(self.headers.get("Content-Length", "0"))
                     body = _json.loads(self.rfile.read(n).decode())
-                except Exception as e:
+                except Exception:
                     self._json(400, {"success": False, "error": "invalid JSON"}); return
                 is_single = self.path == "/v2/scrape"
                 is_batch = self.path == "/v2/batch/scrape"
@@ -214,6 +232,7 @@ services:
 
         if __name__ == "__main__":
             main()
+
         PYEOF_APP
         chmod 644 /app/app.py
         echo "[resi] app.py: $$(wc -l < /app/app.py) lines"
