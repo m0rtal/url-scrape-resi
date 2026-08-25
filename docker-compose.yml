@@ -9,7 +9,8 @@ services:
       - resi
     ports:
       - "3003:3003"
-    shm_size: "1g"
+    shm_size: "256m"
+    mem_limit: 1g
     environment:
       - PORT=3003
       - PROXY_URL=${PROXY_URL:-}
