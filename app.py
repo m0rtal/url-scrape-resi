@@ -13,6 +13,11 @@ DEFAULT_WAIT_AFTER_LOAD = int(os.getenv("WAIT_AFTER_LOAD", "1500"))
 
 def _find_chromium():
     import shutil
+    # headless_shell is the proper headless binary (chromium returns empty DOM)
+    headless_shell_candidates = sorted(glob.glob("/ms-playwright/chromium_headless_shell-*/chrome-linux/headless_shell"), reverse=True)
+    for c in headless_shell_candidates:
+        if os.access(c, os.X_OK):
+            return c
     candidates = [
         shutil.which("chromium"), shutil.which("chromium-browser"),
         "/usr/bin/chromium", "/usr/bin/chromium-browser",
