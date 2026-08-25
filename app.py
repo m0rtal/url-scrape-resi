@@ -13,7 +13,11 @@ DEFAULT_WAIT_AFTER_LOAD = int(os.getenv("WAIT_AFTER_LOAD", "1500"))
 
 def _find_chromium():
     import shutil
-    # headless_shell is the proper headless binary (chromium returns empty DOM)
+    # Try chromium_headless_shell FIRST (always returns DOM) and then chromium
+    chromium_candidates = sorted(glob.glob("/ms-playwright/chromium-*/chrome-linux/chrome"), reverse=True)
+    for c in chromium_candidates:
+        if os.access(c, os.X_OK):
+            return c
     headless_shell_candidates = sorted(glob.glob("/ms-playwright/chromium_headless_shell-*/chrome-linux/headless_shell"), reverse=True)
     for c in headless_shell_candidates:
         if os.access(c, os.X_OK):
@@ -68,7 +72,10 @@ async def _scrape_one(url, wait_after_load, timeout_ms):
     if not CHROMIUM_BIN:
         return None, "chromium binary not found in image"
     total_ms = timeout_ms + wait_after_load
-    args = _chrome_args(wait_after_load, total_ms) + [url]
+    args = _chrome_args(wait_after_load, total_ms) + [
+        f"--virtual-time-budget={max(wait_after_load, 100)}",
+        url,
+    ]
     proc = await asyncio.create_subprocess_exec(
         *args, stdout=subprocess.PIPE, stderr=subprocess.PIPE,
     )
