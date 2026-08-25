@@ -1,7 +1,7 @@
 version: "3.8"
 services:
   url-scrape-resi:
-    build: .
+    image: mcr.microsoft.com/playwright/python:v1.55.0-jammy
     container_name: url-scrape-resi
     restart: unless-stopped
     networks:
@@ -11,9 +11,12 @@ services:
     shm_size: "1g"
     environment:
       - PORT=3003
+      - PROXY_URL=${PROXY_URL:-}
       - BLOCK_MEDIA=True
       - TIMEOUT_MS=30000
       - WAIT_AFTER_LOAD=1500
+      - DEBIAN_FRONTEND=noninteractive
+      - PIP_DISABLE_PIP_VERSION_CHECK=1
 
 networks:
   resi:
